@@ -85,6 +85,11 @@ def load_and_preprocess_data():
     # Add a column for "switched from previous trial"
     df_clean.loc[:, 'prev_choice'] = df_clean.groupby(['participant_id', 'block'])['selected_option'].shift(1)
     df_clean.loc[:, 'switched'] = (df_clean['selected_option'] != df_clean['prev_choice']).astype(int)
+
+    # Calculate total number of switches per participant per block
+    df_clean.loc[:, 'participant_block'] = df_clean['participant_id'].astype(str) + '_' + df_clean['block']
+    switch_counts = df_clean.groupby('participant_block')['switched'].sum().to_dict()
+    df_clean.loc[:, 'switch_count'] = df_clean['participant_block'].map(switch_counts)
     
     return df_clean, missing_selected, missing_rt
 
@@ -443,28 +448,28 @@ with tab3:
     """)
     
     # Overall switch rate by block
-    switch_rate_by_block = df_selected.groupby('block')['switched'].mean()
+    switch_by_block = df_selected.groupby(['block', 'participant_id'])['switch_count'].max().groupby('block').mean()
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.metric("Average Switch Rate in 80/20 Block", f"{switch_rate_by_block.get('80/20', 0):.2f}")
+        st.metric("Average Number of Switches in 80/20 Block", f"{switch_by_block.get('80/20', 0):.1f}")
     
     with col2:
-        st.metric("Average Switch Rate in 50/50 Block", f"{switch_rate_by_block.get('50/50', 0):.2f}")
+        st.metric("Average Number of Switches in 50/50 Block", f"{switch_by_block.get('50/50', 0):.1f}")
     
     # Switch Rate Dynamics over time
-    st.subheader("Exploration Dynamics (Switch Rate Over Time)")
+    st.subheader("Exploration Dynamics (Number of Switches Over Time)")
     
     fig_switch = make_subplots(rows=1, cols=2, 
                               subplot_titles=("Exploration Dynamics: 80/20 Block", 
                                              "Exploration Dynamics: 50/50 Block"))
     
-    # Function to add switch rate data to plots
+    # Function to add switch data to plots
     def add_switch_data(data, name, color):
         # 80/20 block data
         data_8020 = data[data['block'] == '80/20']
-        switch_by_bin = data_8020.groupby('trial_bin')['switched'].mean().reset_index()
+        switch_by_bin = data_8020.groupby('trial_bin')['switched'].sum().reset_index()
         
         fig_switch.add_trace(
             go.Scatter(
@@ -480,7 +485,7 @@ with tab3:
         
         # 50/50 block data
         data_5050 = data[data['block'] == '50/50']
-        switch_by_bin = data_5050.groupby('trial_bin')['switched'].mean().reset_index()
+        switch_by_bin = data_5050.groupby('trial_bin')['switched'].sum().reset_index()
         
         fig_switch.add_trace(
             go.Scatter(
@@ -510,10 +515,8 @@ with tab3:
     
     fig_switch.update_xaxes(title_text="Trial Bin", row=1, col=1)
     fig_switch.update_xaxes(title_text="Trial Bin", row=1, col=2)
-    fig_switch.update_yaxes(title_text="Switch Rate", row=1, col=1)
-    fig_switch.update_yaxes(title_text="Switch Rate", row=1, col=2)
-    fig_switch.update_yaxes(range=[0, 0.6], row=1, col=1)
-    fig_switch.update_yaxes(range=[0, 0.6], row=1, col=2)
+    fig_switch.update_yaxes(title_text="Number of Switches", row=1, col=1)
+    fig_switch.update_yaxes(title_text="Number of Switches", row=1, col=2)
     
     st.plotly_chart(fig_switch, use_container_width=True)
     
