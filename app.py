@@ -45,7 +45,8 @@ def load_and_preprocess_data():
     missing_rt = df_filtered['response_time_ms'].isna().sum()
     
     # Remove rows with missing selected_option or response_time_ms
-    df_clean = df_filtered.dropna(subset=['selected_option', 'response_time_ms'])
+    # Create an explicit copy to avoid SettingWithCopyWarning
+    df_clean = df_filtered.dropna(subset=['selected_option', 'response_time_ms']).copy()
     
     # Identify optimal choice for 80/20 block
     def get_optimal_choice(row):
@@ -60,10 +61,15 @@ def load_and_preprocess_data():
         else:
             return np.nan
     
-    df_clean.loc[:, 'optimal_choice'] = df_clean.apply(get_optimal_choice, axis=1)
+    df_clean['optimal_choice'] = df_clean.apply(get_optimal_choice, axis=1)
     
-    # Mark correct choices in 80/20 block
-    df_clean.loc[:, 'chose_optimal'] = (df_clean['selected_option'] == df_clean['optimal_choice'])
+    # Mark correct choices in 80/20 block - UPDATED LOGIC
+    df_clean['chose_optimal'] = False  # Default to False
+    
+    # Check if selected_option = 0 (left) and left_option_prob = 0.8, OR if selected_option = 1 (right) and right_option_prob = 0.8
+    condition1 = (df_clean['selected_option'] == 0) & (df_clean['left_option_prob'] == 0.8)
+    condition2 = (df_clean['selected_option'] == 1) & (df_clean['right_option_prob'] == 0.8)
+    df_clean.loc[condition1 | condition2, 'chose_optimal'] = True
     
     # For 50/50 block, track if choice matches first choice in the block
     df_5050 = df_clean[df_clean['block'] == '50/50'].copy()
@@ -80,16 +86,16 @@ def load_and_preprocess_data():
             return np.nan
         return 1 if row['selected_option'] == first_choice_dict.get(row['participant_id']) else 0
     
-    df_clean.loc[:, 'matches_first_choice'] = df_clean.apply(matches_first_choice, axis=1)
+    df_clean['matches_first_choice'] = df_clean.apply(matches_first_choice, axis=1)
     
     # Add a column for "switched from previous trial"
-    df_clean.loc[:, 'prev_choice'] = df_clean.groupby(['participant_id', 'block'])['selected_option'].shift(1)
-    df_clean.loc[:, 'switched'] = (df_clean['selected_option'] != df_clean['prev_choice']).astype(int)
+    df_clean['prev_shape'] = df_clean.groupby(['participant_id', 'block'])['selected_shape'].shift(1)
+    df_clean['switched'] = (df_clean['selected_shape'] != df_clean['prev_shape']).astype(int)
 
     # Calculate total number of switches per participant per block
-    df_clean.loc[:, 'participant_block'] = df_clean['participant_id'].astype(str) + '_' + df_clean['block']
+    df_clean['participant_block'] = df_clean['participant_id'].astype(str) + '_' + df_clean['block']
     switch_counts = df_clean.groupby('participant_block')['switched'].sum().to_dict()
-    df_clean.loc[:, 'switch_count'] = df_clean['participant_block'].map(switch_counts)
+    df_clean['switch_count'] = df_clean['participant_block'].map(switch_counts)
     
     return df_clean, missing_selected, missing_rt
 
@@ -2176,7 +2182,7 @@ while they may show more varied behavior in the 50/50 block where no strategy is
 ### Metrics Explained
 
 - **Optimal Choice Rate**: The proportion of trials where the participant chose the option with higher reward probability.
-- **Switch Rate**: The proportion of trials where the participant chose a different option than on the previous trial.
+- **Switch Rate**: The proportion of trials where the participant chose a different shape  than on the previous trial.
 - **Response Time (RT)**: The time taken to make a choice on each trial, measured in milliseconds.
 - **Entropy**: A measure of choice randomness or exploration, with higher values indicating more exploration.
 
