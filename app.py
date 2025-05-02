@@ -34,7 +34,7 @@ def load_and_preprocess_data():
     3. Identify optimal choices in 80/20 block
     """
     # Load data
-    data_path = 'master.csv'
+    data_path = 'new_master.csv'
     df = pd.read_csv(data_path)
     
     # Filter out practice trials
@@ -88,7 +88,7 @@ def load_and_preprocess_data():
     
     df_clean['matches_first_choice'] = df_clean.apply(matches_first_choice, axis=1)
     
-    # Add a column for "switched from previous trial"
+    # Add a column for "switched from previous trial" based on shape selection
     df_clean['prev_shape'] = df_clean.groupby(['participant_id', 'block'])['selected_shape'].shift(1)
     df_clean['switched'] = (df_clean['selected_shape'] != df_clean['prev_shape']).astype(int)
 
@@ -465,17 +465,17 @@ with tab3:
         st.metric("Average Number of Switches in 50/50 Block", f"{switch_by_block.get('50/50', 0):.1f}")
     
     # Switch Rate Dynamics over time
-    st.subheader("Exploration Dynamics (Number of Switches Over Time)")
+    st.subheader("Exploration Dynamics (Switch Rate Over Time)")
     
     fig_switch = make_subplots(rows=1, cols=2, 
                               subplot_titles=("Exploration Dynamics: 80/20 Block", 
                                              "Exploration Dynamics: 50/50 Block"))
     
-    # Function to add switch data to plots
+    # Function to add switch rate data to plots
     def add_switch_data(data, name, color):
         # 80/20 block data
         data_8020 = data[data['block'] == '80/20']
-        switch_by_bin = data_8020.groupby('trial_bin')['switched'].sum().reset_index()
+        switch_by_bin = data_8020.groupby('trial_bin')['switched'].mean().reset_index()
         
         fig_switch.add_trace(
             go.Scatter(
@@ -491,7 +491,7 @@ with tab3:
         
         # 50/50 block data
         data_5050 = data[data['block'] == '50/50']
-        switch_by_bin = data_5050.groupby('trial_bin')['switched'].sum().reset_index()
+        switch_by_bin = data_5050.groupby('trial_bin')['switched'].mean().reset_index()
         
         fig_switch.add_trace(
             go.Scatter(
@@ -521,8 +521,10 @@ with tab3:
     
     fig_switch.update_xaxes(title_text="Trial Bin", row=1, col=1)
     fig_switch.update_xaxes(title_text="Trial Bin", row=1, col=2)
-    fig_switch.update_yaxes(title_text="Number of Switches", row=1, col=1)
-    fig_switch.update_yaxes(title_text="Number of Switches", row=1, col=2)
+    fig_switch.update_yaxes(title_text="Switch Rate", row=1, col=1)
+    fig_switch.update_yaxes(title_text="Switch Rate", row=1, col=2)
+    fig_switch.update_yaxes(range=[0, 1], row=1, col=1)
+    fig_switch.update_yaxes(range=[0, 1], row=1, col=2)
     
     st.plotly_chart(fig_switch, use_container_width=True)
     
@@ -2172,23 +2174,33 @@ st.markdown("---")
 st.markdown("""
 ### About Probabilistic Reward Learning (PRL)
 
-In PRL tasks, participants learn to make choices between options with different reward probabilities:
-- In the 80/20 block, one option has an 80% chance of reward, while the other has only 20%.
-- In the 50/50 block, both options have equal (50%) chance of reward.
+In PRL tasks, participants learn to choose between two options whose chance of delivering a reward varies by block:
+- **80/20 block**: one shape yields a reward 80% of the time, the other only 20%.
+- **50/50 block**: both shapes yield a reward 50% of the time.
 
-Participants typically learn to choose the more rewarding option in the 80/20 block,
-while they may show more varied behavior in the 50/50 block where no strategy is optimal.
+Under asymmetric contingencies (80/20), participants typically learn to favor the high-reward shape over successive trials. When both options are equal (50/50), choices tend to remain around chance and switching/exploration remains higher.
+
+---
 
 ### Metrics Explained
 
-- **Optimal Choice Rate**: The proportion of trials where the participant chose the option with higher reward probability.
-- **Switch Rate**: The proportion of trials where the participant chose a different shape  than on the previous trial.
-- **Response Time (RT)**: The time taken to make a choice on each trial, measured in milliseconds.
-- **Entropy**: A measure of choice randomness or exploration, with higher values indicating more exploration.
+- **Cumulative Reward** (`cum_reward`): Total points a participant earned in a block, summing all trial outcomes.
+- **Optimal Choice Rate** (`POC`): Proportion of trials in which the participant selected the higher-probability (80%) shape in the 80/20 block.
+- **Switch Rate** (`switch_rate`): Fraction of trials where the participant chose a different shape than on the immediately preceding trial.
+- **Switch Count** (`switch_count`): Raw number of such switches across all trials in a block.
+- **Average Response Time** (`Avg_RT`): Mean decision latency (in ms) across all trials in a block.
+- **Difference Scores**:
+  - **POC_diff**: `POC(80/20) - POC(50/50)`  
+  - **switch_diff**: `switch_rate(80/20) - switch_rate(50/50)`  
+  - **avg_RT_diff**: `Avg_RT(80/20) - Avg_RT(50/50)`  
+
+These difference scores capture how behavior shifts when moving from an informative (80/20) to an uninformative (50/50) environment.
+
+---
 
 ### Analysis Tips
 
-- Use the sidebar to select specific participants to analyze.
-- Adjust the trial bin size to control the granularity of time-based analyses.
-- Compare blocks to understand how behavior changes with different reward probabilities.
+- Use the sidebar participant selector to focus on individual performance.
+- Adjust the trial bin size to zoom into early vs. late learning phases.
+- Compare metrics between the two blocks to see how learning and exploration adapt under different reward probabilities.
 """)
